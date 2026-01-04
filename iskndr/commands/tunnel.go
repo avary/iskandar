@@ -10,10 +10,13 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/igneel64/iskandar/shared"
 	"github.com/igneel64/iskandar/shared/protocol"
+	"github.com/igneel64/iskndr/cli/internal/logger"
 	"github.com/spf13/cobra"
 )
 
 func newTunnelCommand() *cobra.Command {
+	var enableLogging bool
+
 	tunnelCmd := &cobra.Command{
 		Use: "tunnel <port>",
 
@@ -22,6 +25,8 @@ func newTunnelCommand() *cobra.Command {
 		Args:                  cobra.ExactArgs(1),
 		DisableFlagsInUseLine: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			logger.Initialize(enableLogging)
+
 			port, err := strconv.Atoi(args[0])
 			if err != nil {
 				return fmt.Errorf("port must be a number: %w", err)
@@ -29,12 +34,15 @@ func newTunnelCommand() *cobra.Command {
 			if port < 1 || port > 65535 {
 				return fmt.Errorf("port must be between 1 and 65535")
 			}
-			destinationAddress := "http://localhost:" + strconv.Itoa(port)
-			fmt.Printf("Starting iskndr on port %d...\n", port)
-			fmt.Printf("Requests will be routed to %s\n", destinationAddress)
 
-			c, _, err := websocket.DefaultDialer.Dial("ws://localhost:8080/tunnel/connect", nil)
+			destinationAddress := "http://localhost:" + strconv.Itoa(port)
+			serverURL := "ws://localhost:8080/tunnel/connect"
+
+			logger.TunnelStarting(port, serverURL)
+
+			c, _, err := websocket.DefaultDialer.Dial(serverURL, nil)
 			if err != nil {
+				logger.TunnelDisconnected(err)
 				return fmt.Errorf("failed to connect to websocket: %w", err)
 			}
 			defer c.Close()
@@ -42,30 +50,37 @@ func newTunnelCommand() *cobra.Command {
 
 			var regMsg protocol.RegisterTunnelMessage
 			if err = c.ReadJSON(&regMsg); err != nil {
+				logger.TunnelDisconnected(err)
 				return fmt.Errorf("failed to read register tunnel message: %w", err)
 			}
 
-			fmt.Printf("Tunnel url at %s\n", regMsg.Subdomain)
+			logger.TunnelConnected(regMsg.Subdomain)
 
 			for {
 				var requestMsg protocol.Message
 				if err := c.ReadJSON(&requestMsg); err != nil {
+					logger.TunnelDisconnected(err)
 					return fmt.Errorf("failed to read request message: %w", err)
 				}
-				fmt.Printf("Received request: %+v\n", requestMsg)
+				logger.RequestReceived(requestMsg.Id, requestMsg.Method, requestMsg.Path)
 
 				go sendResponse(safeWriteConn, &requestMsg, destinationAddress)
 			}
 		},
 	}
 
+	tunnelCmd.Flags().BoolVar(&enableLogging, "logging", false, "Enable structured logging to stdout")
+
 	return tunnelCmd
 }
 
 func sendResponse(c *shared.SafeWebSocketConn, requestMsg *protocol.Message, destinationAddress string) {
+	logger.ForwardingToLocal(requestMsg.Id, requestMsg.Method, destinationAddress+requestMsg.Path)
+
 	req, err := http.NewRequest(requestMsg.Method, destinationAddress+requestMsg.Path, bytes.NewReader(requestMsg.Body))
 
 	if err != nil {
+		logger.ResponseSendFailed(requestMsg.Id, err)
 		c.WriteJSON(&protocol.Message{
 			Type:   "response",
 			Id:     requestMsg.Id,
@@ -81,7 +96,7 @@ func sendResponse(c *shared.SafeWebSocketConn, requestMsg *protocol.Message, des
 
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-
+		logger.LocalRequestFailed(requestMsg.Id, err)
 		c.WriteJSON(&protocol.Message{
 			Type:   "response",
 			Id:     requestMsg.Id,
@@ -100,6 +115,7 @@ func sendResponse(c *shared.SafeWebSocketConn, requestMsg *protocol.Message, des
 
 		if err != nil && err != io.EOF {
 			if firstChunk {
+				logger.ResponseSendFailed(requestMsg.Id, err)
 				c.WriteJSON(&protocol.Message{
 					Type:   "response",
 					Id:     requestMsg.Id,
@@ -109,7 +125,7 @@ func sendResponse(c *shared.SafeWebSocketConn, requestMsg *protocol.Message, des
 				})
 			} else {
 				// Already sent status - just log and abort
-				fmt.Printf("error reading response body mid-stream: %v\n", err)
+				logger.Error("Error reading response body mid-stream", err)
 			}
 			break
 		}
@@ -125,12 +141,16 @@ func sendResponse(c *shared.SafeWebSocketConn, requestMsg *protocol.Message, des
 			if firstChunk {
 				responseMsg.Status = res.StatusCode
 				responseMsg.Headers = shared.SerializeHeaders(res.Header)
+				logger.LocalResponseReceived(requestMsg.Id, res.StatusCode, byteCount)
 				firstChunk = false
+			} else {
+				logger.StreamingResponse(requestMsg.Id, byteCount, err == io.EOF)
 			}
 
 			if err = c.WriteJSON(&responseMsg); err != nil {
-				// log error
-				fmt.Printf("failed to write response message: %v\n", err)
+				logger.ResponseSendFailed(requestMsg.Id, err)
+			} else if responseMsg.Done {
+				logger.ResponseSent(requestMsg.Id, responseMsg.Status)
 			}
 		}
 
