@@ -3,6 +3,7 @@ package main
 import (
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -15,18 +16,20 @@ import (
 
 type IskndrServer struct {
 	http.Handler
+	publicURLBase  string
 	connStore      ConnectionStore
 	requestManager RequestManager
 }
 
-func NewIskndrServer(connectionStore ConnectionStore, requestManager RequestManager) *IskndrServer {
+func NewIskndrServer(publicURLBase string, connectionStore ConnectionStore, requestManager RequestManager) *IskndrServer {
 	s := &IskndrServer{
+		publicURLBase:  publicURLBase,
 		connStore:      connectionStore,
 		requestManager: requestManager,
 	}
 
 	var upgrader = websocket.Upgrader{
-		// CheckOrigin: func(r *http.Request) bool { return true },
+		CheckOrigin: func(r *http.Request) bool { return true },
 	}
 
 	router := http.NewServeMux()
@@ -47,7 +50,15 @@ func NewIskndrServer(connectionStore ConnectionStore, requestManager RequestMana
 
 		logger.TunnelConnected(subdomainKey, r.RemoteAddr)
 
-		err = con.WriteJSON(&protocol.RegisterTunnelMessage{Subdomain: "http://" + subdomainKey + ".localhost.direct:8080"})
+		// Parse public URL base to construct subdomain URL
+		u, err := url.Parse(s.publicURLBase)
+		if err != nil {
+			// Fallback to defaults if parsing fails
+			u = &url.URL{Scheme: "http", Host: s.publicURLBase}
+		}
+		subdomainURL := u.Scheme + "://" + subdomainKey + "." + u.Host
+
+		err = con.WriteJSON(&protocol.RegisterTunnelMessage{Subdomain: subdomainURL})
 		if err != nil {
 			http.Error(w, "Failed to send register tunnel message", http.StatusInternalServerError)
 			return

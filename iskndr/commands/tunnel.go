@@ -2,45 +2,54 @@ package commands
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
-	"strconv"
+	"os"
+	"os/signal"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/gorilla/websocket"
 	"github.com/igneel64/iskandar/shared"
 	"github.com/igneel64/iskandar/shared/protocol"
+	"github.com/igneel64/iskndr/cli/internal/config"
 	"github.com/igneel64/iskndr/cli/internal/logger"
+	"github.com/igneel64/iskndr/cli/internal/ui"
 	"github.com/spf13/cobra"
 )
 
 func newTunnelCommand() *cobra.Command {
 	var enableLogging bool
+	var serverUrl string
 
 	tunnelCmd := &cobra.Command{
-		Use: "tunnel <port>",
+		Use:   "tunnel <destination>",
+		Short: "Expose a local application to the internet",
+		Long: `This command creates a tunnel to your local application, making it accessible from the internet.
 
-		Short:                 "Expose a local application to the internet",
-		Long:                  "This command allows you to create a tunnel to your local application, making it accessible from the internet.",
+The destination can be specified as:
+  - port number only (e.g., '8080') - defaults to localhost:8080
+  - host:port (e.g., 'foo.bar:80') - connects to the specified host and port`,
 		Args:                  cobra.ExactArgs(1),
 		DisableFlagsInUseLine: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			logger.Initialize(enableLogging)
 
-			port, err := strconv.Atoi(args[0])
+			destinationAddress, err := config.ParseDestination(args[0])
 			if err != nil {
-				return fmt.Errorf("port must be a number: %w", err)
-			}
-			if port < 1 || port > 65535 {
-				return fmt.Errorf("port must be between 1 and 65535")
+				return err
 			}
 
-			destinationAddress := "http://localhost:" + strconv.Itoa(port)
-			serverURL := "ws://localhost:8080/tunnel/connect"
+			serverWSUrl, err := config.ParseServerURL(serverUrl)
+			if err != nil {
+				return err
+			}
 
-			logger.TunnelStarting(port, serverURL)
+			logger.TunnelStarting(destinationAddress, serverWSUrl)
 
-			c, _, err := websocket.DefaultDialer.Dial(serverURL, nil)
+			c, _, err := websocket.DefaultDialer.Dial(serverWSUrl, nil)
 			if err != nil {
 				logger.TunnelDisconnected(err)
 				return fmt.Errorf("failed to connect to websocket: %w", err)
@@ -56,9 +65,33 @@ func newTunnelCommand() *cobra.Command {
 
 			logger.TunnelConnected(regMsg.Subdomain)
 
+			// Setup signal handler for Ctrl+C
+			sigChan := make(chan os.Signal, 1)
+			signal.Notify(sigChan, os.Interrupt)
+
+			var program *tea.Program
+			if !enableLogging {
+				program = ui.InitUi(destinationAddress, serverUrl, regMsg.Subdomain)
+			}
+
+			// Handle Ctrl+C gracefully
+			go func() {
+				<-sigChan
+				fmt.Println("\nReceived interrupt signal, shutting down...")
+				if program != nil {
+					program.Quit()
+				}
+				c.Close()
+			}()
+
 			for {
 				var requestMsg protocol.Message
 				if err := c.ReadJSON(&requestMsg); err != nil {
+					// Check if error is a normal WebSocket close or local connection closure
+					if websocket.IsCloseError(err, websocket.CloseNormalClosure) ||
+						errors.Is(err, net.ErrClosed) {
+						return nil
+					}
 					logger.TunnelDisconnected(err)
 					return fmt.Errorf("failed to read request message: %w", err)
 				}
@@ -69,7 +102,11 @@ func newTunnelCommand() *cobra.Command {
 		},
 	}
 
+	tunnelCmd.Flags().StringVar(&serverUrl, "server", "", "Host of the tunnel server to connect to. Host will be used with ws:// protocol.")
 	tunnelCmd.Flags().BoolVar(&enableLogging, "logging", false, "Enable structured logging to stdout")
+	if err := tunnelCmd.MarkFlagRequired("server"); err != nil {
+		panic(err)
+	}
 
 	return tunnelCmd
 }

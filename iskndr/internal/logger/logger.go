@@ -25,9 +25,9 @@ func Initialize(logToStdout bool) {
 	zerolog.SetGlobalLevel(zerolog.DebugLevel)
 }
 
-func TunnelStarting(port int, serverURL string) {
+func TunnelStarting(destination string, serverURL string) {
 	log.Info().
-		Int("local_port", port).
+		Str("local_destination", destination).
 		Str("server", serverURL).
 		Msg("Starting tunnel")
 }
@@ -101,4 +101,8 @@ func Error(msg string, err error) {
 	log.Error().
 		Err(err).
 		Msg(msg)
+}
+
+func Info(msg string) {
+	log.Info().Msg(msg)
 }
