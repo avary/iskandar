@@ -131,9 +131,3 @@ func RequestTimeout(requestID, subdomain, path string) {
 		Str("path", path).
 		Msg("Request timeout")
 }
-
-func Error(msg string, err error) {
-	log.Error().
-		Err(err).
-		Msg(msg)
-}

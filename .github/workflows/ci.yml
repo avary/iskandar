@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: false
+
+      - name: Test shared module
+        working-directory: ./shared
+        run: |
+          go test -v -race ./...
+
+      - name: Test tunnel-server
+        working-directory: ./tunnel-server
+        run: |
+          go test -v -race ./...
+
+      - name: Test iskndr CLI
+        working-directory: ./iskndr
+        run: |
+          go test -v -race ./...
+
+      - name: Build tunnel-server
+        working-directory: ./tunnel-server
+        run: |
+          go build -v .
+
+      - name: Build iskndr CLI
+        working-directory: ./iskndr
+        run: |
+          go build -v ./cmd/iskndr

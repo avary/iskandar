@@ -18,6 +18,7 @@ func SerializeHeaders(headers http.Header) map[string]string {
 	return serializedHeaders
 }
 
+/* Reading and writing to WebSockets is not thread safe on its own */
 type SafeWebSocketConn struct {
 	conn *websocket.Conn
 	mu   sync.Mutex

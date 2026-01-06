@@ -94,7 +94,6 @@ The destination can be specified as:
 			for {
 				var requestMsg protocol.Message
 				if err := c.ReadJSON(&requestMsg); err != nil {
-					// Check if error is a normal WebSocket close or local connection closure
 					if websocket.IsCloseError(err, websocket.CloseNormalClosure) ||
 						errors.Is(err, net.ErrClosed) {
 						return nil
