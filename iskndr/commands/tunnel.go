@@ -13,11 +13,11 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/gorilla/websocket"
+	"github.com/igneel64/iskandar/iskndr/internal/config"
+	"github.com/igneel64/iskandar/iskndr/internal/logger"
+	"github.com/igneel64/iskandar/iskndr/internal/ui"
 	"github.com/igneel64/iskandar/shared"
 	"github.com/igneel64/iskandar/shared/protocol"
-	"github.com/igneel64/iskndr/cli/internal/config"
-	"github.com/igneel64/iskndr/cli/internal/logger"
-	"github.com/igneel64/iskndr/cli/internal/ui"
 	"github.com/spf13/cobra"
 )
 

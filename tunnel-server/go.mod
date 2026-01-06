@@ -1,4 +1,4 @@
-module github.com/igneel64/iskandar/tunnel
+module github.com/igneel64/iskandar/server
 
 go 1.25.5
 

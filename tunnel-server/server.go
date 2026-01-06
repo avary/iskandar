@@ -9,9 +9,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/igneel64/iskandar/server/internal/logger"
 	"github.com/igneel64/iskandar/shared"
 	"github.com/igneel64/iskandar/shared/protocol"
-	"github.com/igneel64/iskandar/tunnel/internal/logger"
 )
 
 type IskndrServer struct {

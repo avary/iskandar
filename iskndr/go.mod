@@ -1,4 +1,4 @@
-module github.com/igneel64/iskndr/cli
+module github.com/igneel64/iskandar/iskndr
 
 go 1.25.5
 

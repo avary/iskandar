@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/igneel64/iskandar/tunnel/internal/logger"
+	"github.com/igneel64/iskandar/server/internal/logger"
 )
 
 func main() {

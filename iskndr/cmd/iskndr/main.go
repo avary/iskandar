@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/igneel64/iskndr/cli/commands"
+	"github.com/igneel64/iskandar/iskndr/commands"
 )
 
 func main() {
