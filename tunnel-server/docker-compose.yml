@@ -1,0 +1,36 @@
+version: "3.8"
+
+services:
+  tunnel-server:
+    build:
+      context: ..
+      dockerfile: tunnel-server/Dockerfile
+    container_name: iskandar-tunnel
+    restart: unless-stopped
+    environment:
+      - ISKNDR_BASE_SCHEME=https
+      - ISKNDR_BASE_DOMAIN=tunnel.localhost.direct
+      - ISKNDR_PORT=8080
+    networks:
+      - tunnel-net
+    expose:
+      - "8080"
+
+  nginx:
+    image: nginx:alpine
+    container_name: iskandar-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    networks:
+      - tunnel-net
+    depends_on:
+      - tunnel-server
+
+networks:
+  tunnel-net:
+    driver: bridge

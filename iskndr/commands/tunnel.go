@@ -2,6 +2,7 @@ package commands
 
 import (
 	"bytes"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -23,6 +24,7 @@ import (
 func newTunnelCommand() *cobra.Command {
 	var enableLogging bool
 	var serverUrl string
+	var insecure bool
 
 	tunnelCmd := &cobra.Command{
 		Use:   "tunnel <destination>",
@@ -49,7 +51,12 @@ The destination can be specified as:
 
 			logger.TunnelStarting(destinationAddress, serverWSUrl)
 
-			c, _, err := websocket.DefaultDialer.Dial(serverWSUrl, nil)
+			dialer := websocket.DefaultDialer
+			if insecure {
+				dialer.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+			}
+
+			c, _, err := dialer.Dial(serverWSUrl, nil)
 			if err != nil {
 				logger.TunnelDisconnected(err)
 				return fmt.Errorf("failed to connect to websocket: %w", err)
@@ -104,6 +111,7 @@ The destination can be specified as:
 
 	tunnelCmd.Flags().StringVar(&serverUrl, "server", "", "Tunnel server URL (e.g., localhost:8080, https://tunnel.example.com).")
 	tunnelCmd.Flags().BoolVar(&enableLogging, "logging", false, "Enable structured logging to stdout")
+	tunnelCmd.Flags().BoolVar(&insecure, "allow-insecure", false, "Skip TLS certificate verification")
 	if err := tunnelCmd.MarkFlagRequired("server"); err != nil {
 		panic(err)
 	}
