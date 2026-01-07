@@ -13,7 +13,7 @@ import (
 type ConnectionStore interface {
 	RegisterConnection(conn *websocket.Conn) (string, error)
 	GetConnection(subdomainKey string) (*shared.SafeWebSocketConn, error)
-	RemoveConnection(subdomainKey string) error
+	RemoveConnection(subdomainKey string)
 }
 
 type InMemoryConnectionStore struct {
@@ -28,7 +28,10 @@ func NewInMemoryConnectionStore() *InMemoryConnectionStore {
 }
 
 func (i *InMemoryConnectionStore) RegisterConnection(conn *websocket.Conn) (string, error) {
-	subdomainKey := generateSubdomainKey()
+	subdomainKey, err := generateSubdomainKey()
+	if err != nil {
+		return "", err
+	}
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	i.connMap[subdomainKey] = shared.NewSafeWebSocketConn(conn)
@@ -45,14 +48,13 @@ func (i *InMemoryConnectionStore) GetConnection(subdomainKey string) (*shared.Sa
 	return conn, nil
 }
 
-func (i *InMemoryConnectionStore) RemoveConnection(subdomainKey string) error {
+func (i *InMemoryConnectionStore) RemoveConnection(subdomainKey string) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	delete(i.connMap, subdomainKey)
-	return nil
 }
 
-func generateSubdomainKey() string {
+func generateSubdomainKey() (string, error) {
 	const (
 		subdomainLength = 8
 		charset         = "abcdefghijklmnopqrstuvwxyz0123456789"
@@ -61,9 +63,12 @@ func generateSubdomainKey() string {
 
 	result := make([]byte, subdomainLength)
 	for i := range result {
-		num, _ := rand.Int(rand.Reader, big.NewInt(int64(charsetLength)))
+		num, err := rand.Int(rand.Reader, big.NewInt(int64(charsetLength)))
+		if err != nil {
+			return "", err
+		}
 		result[i] = charset[num.Int64()]
 	}
 
-	return string(result)
+	return string(result), nil
 }

@@ -28,10 +28,6 @@ func ServerStarted(port int) {
 		Msg("Tunnel server started")
 }
 
-func ServerShutdown() {
-	log.Info().Msg("Server shutting down")
-}
-
 func TunnelConnected(subdomain, remoteAddr string) {
 	log.Info().
 		Str("subdomain", subdomain).
@@ -130,4 +126,20 @@ func RequestTimeout(requestID, subdomain, path string) {
 		Str("subdomain", subdomain).
 		Str("path", path).
 		Msg("Request timeout")
+}
+
+func ResponseWriteFailed(requestID string, bytesExpected, bytesWritten int, err error) {
+	log.Debug().
+		Str("request_id", requestID).
+		Int("bytes_expected", bytesExpected).
+		Int("bytes_written", bytesWritten).
+		Err(err).
+		Msg("Failed to write response to client")
+}
+
+func WebSocketCloseFailed(subdomain string, err error) {
+	log.Debug().
+		Str("subdomain", subdomain).
+		Err(err).
+		Msg("Failed to close WebSocket connection")
 }

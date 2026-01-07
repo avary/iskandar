@@ -26,9 +26,8 @@ func (m *MockConnectionStore) GetConnection(subdomain string) (*shared.SafeWebSo
 	return args.Get(0).(*shared.SafeWebSocketConn), args.Error(1)
 }
 
-func (m *MockConnectionStore) RemoveConnection(subdomain string) error {
-	args := m.Called(subdomain)
-	return args.Error(0)
+func (m *MockConnectionStore) RemoveConnection(subdomain string) {
+	m.Called(subdomain)
 }
 
 type MockRequestManager struct {
@@ -63,6 +62,8 @@ func TestServer(t *testing.T) {
 		// Connect via WebSocket
 		conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 		require.NoError(t, err, "should connect to websocket")
+
+		//nolint:errcheck
 		defer conn.Close()
 
 		// Verify connection is established

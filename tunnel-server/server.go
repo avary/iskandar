@@ -39,9 +39,16 @@ func NewIskndrServer(publicURLBase string, connectionStore ConnectionStore, requ
 			http.Error(w, "Failed to upgrade to websocket", http.StatusInternalServerError)
 			return
 		}
-		defer con.Close()
 
-		subdomainKey, err := s.connStore.RegisterConnection(con)
+		var subdomainKey string
+
+		defer func() {
+			if err := con.Close(); err != nil {
+				logger.WebSocketCloseFailed(subdomainKey, err)
+			}
+		}()
+
+		subdomainKey, err = s.connStore.RegisterConnection(con)
 		if err != nil {
 			logger.TunnelRegistrationFailed(err)
 			http.Error(w, "Failed to register connection", http.StatusInternalServerError)
@@ -96,6 +103,8 @@ func NewIskndrServer(publicURLBase string, connectionStore ConnectionStore, requ
 			http.Error(w, "Failed to read request body", http.StatusInternalServerError)
 			return
 		}
+
+		//nolint:errcheck
 		defer r.Body.Close()
 
 		requestId := uuid.New().String()
@@ -136,7 +145,11 @@ func NewIskndrServer(publicURLBase string, connectionStore ConnectionStore, requ
 				w.Header().Set(k, v)
 			}
 			w.WriteHeader(response.Status)
-			w.Write(response.Body)
+			n, err := w.Write(response.Body)
+			if err != nil {
+				logger.ResponseWriteFailed(requestId, len(response.Body), n, err)
+				return
+			}
 			if flusher, ok := w.(http.Flusher); ok {
 				flusher.Flush()
 			}
@@ -153,7 +166,11 @@ func NewIskndrServer(publicURLBase string, connectionStore ConnectionStore, requ
 						return
 					}
 
-					w.Write(response.Body)
+					n, err := w.Write(response.Body)
+					if err != nil {
+						logger.ResponseWriteFailed(requestId, len(response.Body), n, err)
+						return
+					}
 					if flusher, ok := w.(http.Flusher); ok {
 						flusher.Flush()
 					}

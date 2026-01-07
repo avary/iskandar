@@ -33,7 +33,13 @@ func NewSafeWebSocketConn(conn *websocket.Conn) *SafeWebSocketConn {
 func (s *SafeWebSocketConn) WriteJSON(msg *protocol.Message) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	/* Consider adding a s.conn.SetWriteDeadline(...) if we want faster timeout */
 	return s.conn.WriteJSON(msg)
+}
+
+/* Reads are not thread safe, as it is not needed for now. */
+func (s *SafeWebSocketConn) ReadRegistrationMsg(msg *protocol.RegisterTunnelMessage) error {
+	return s.conn.ReadJSON(msg)
 }
 
 func (s *SafeWebSocketConn) ReadJSON(msg *protocol.Message) error {
@@ -41,5 +47,7 @@ func (s *SafeWebSocketConn) ReadJSON(msg *protocol.Message) error {
 }
 
 func (s *SafeWebSocketConn) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return s.conn.Close()
 }

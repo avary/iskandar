@@ -19,6 +19,7 @@ func createWSServerConnection(t *testing.T) *websocket.Conn {
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		con, err := upgrader.Upgrade(w, r, nil)
 		require.NoError(t, err)
+		//nolint:errcheck
 		defer con.Close()
 	}))
 
@@ -28,6 +29,7 @@ func createWSServerConnection(t *testing.T) *websocket.Conn {
 	c, _, err := websocket.DefaultDialer.Dial(wsUrl, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() {
+		//nolint:errcheck
 		c.Close()
 	})
 
@@ -74,7 +76,6 @@ func TestInMemoryConnectionStore(t *testing.T) {
 		require.NoError(t, err)
 
 		connectionStore.RemoveConnection(subdomain)
-
 		_, err = connectionStore.GetConnection(subdomain)
 		assert.Error(t, err)
 		assert.NotContains(t, connectionStore.connMap, subdomain)

@@ -7,7 +7,7 @@ func Execute() error {
 	rootCmd := &cobra.Command{
 		Use:   "iskndr",
 		Short: "Iskandar is a CLI tool for exposing a tunnel to your local application.",
-		Long:  "Long description",
+		Long:  "A lightweight, self-hosted HTTP tunnel service for exposing local applications to the internet in Go.",
 		Args:  cobra.NoArgs,
 	}
 
