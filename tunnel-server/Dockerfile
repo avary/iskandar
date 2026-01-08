@@ -22,6 +22,6 @@ RUN apk --no-cache add ca-certificates
 
 WORKDIR /app
 
-COPY --from=builder /build/tunnel-server .
+COPY --from=builder /build/tunnel-server/tunnel-server .
 
 CMD ["./tunnel-server"]

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 
 	"github.com/igneel64/iskandar/server/internal/config"
 	"github.com/igneel64/iskandar/server/internal/logger"
@@ -19,7 +20,10 @@ func main() {
 
 	logger.Initialize(cfg.Logging)
 
-	publicURLBase := cfg.BaseScheme + "://" + cfg.BaseDomain
+	publicURLBase, err := url.Parse(cfg.BaseScheme + "://" + cfg.BaseDomain)
+	if err != nil {
+		log.Fatalf("Failed to parse public URL base: %v", err)
+	}
 	connectionStore := NewInMemoryConnectionStore()
 	requestManager := NewInMemoryRequestManager()
 

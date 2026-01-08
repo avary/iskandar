@@ -1,0 +1,31 @@
+services:
+  test-app:
+    build:
+      context: .
+      dockerfile: test-app/Dockerfile
+    ports:
+      - "3003:3003"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3003/health"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  tunnel-server:
+    build:
+      context: ..
+      dockerfile: tunnel-server/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - ISKNDR_BASE_DOMAIN=localhost.direct:8080
+      - ISKNDR_BASE_SCHEME=http
+      - ISKNDR_PORT=8080
+      - ISKNDR_LOGGING=true
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
+      start_period: 5s

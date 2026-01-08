@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -49,7 +50,10 @@ func (m *MockRequestManager) RemoveRequest(requestId string) {
 }
 
 func TestServer(t *testing.T) {
-	server := NewIskndrServer("localhost.direct:8080", new(MockConnectionStore), new(MockRequestManager))
+	publicURLBase, err := url.Parse("http://localhost.direct:8080")
+	require.NoError(t, err)
+
+	server := NewIskndrServer(publicURLBase, new(MockConnectionStore), new(MockRequestManager))
 
 	t.Run("accepts websocket connection at /tunnel/connect", func(t *testing.T) {
 		// Create test server

@@ -13,6 +13,7 @@ import (
 	iskWS "github.com/igneel64/iskandar/iskndr/internal/websocket"
 	"github.com/igneel64/iskandar/shared"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 func newTunnelCommand() *cobra.Command {
@@ -31,6 +32,8 @@ The destination can be specified as:
 		Args:                  cobra.ExactArgs(1),
 		DisableFlagsInUseLine: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			restorationHandler := terminalRestoration()
+			defer restorationHandler()
 			logger.Initialize(enableLogging)
 
 			destinationAddress, err := config.ParseDestination(args[0])
@@ -69,7 +72,8 @@ The destination can be specified as:
 				program = ui.InitUi(destinationAddress, serverUrl, regMsg.Subdomain)
 			}
 
-			setupShutdownHandler(program, c)
+			setupShutdownHandler(c, program)
+
 			return client.AcceptRequests(destinationAddress)
 		},
 	}
@@ -84,19 +88,25 @@ The destination can be specified as:
 	return tunnelCmd
 }
 
-func setupShutdownHandler(program *tea.Program, c *shared.SafeWebSocketConn) {
-	ch := make(chan os.Signal, 1)
-	signal.Notify(ch, os.Interrupt)
-
+func setupShutdownHandler(c *shared.SafeWebSocketConn, program *tea.Program) {
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt)
 	go func() {
-		<-ch
-		fmt.Println("\nShutting down tunnel...")
+		<-sigCh
 		if program != nil {
 			program.Quit()
 		}
-		err := c.Close()
-		if err != nil {
-			fmt.Println("Error closing connection while shutting down:", err)
-		}
+		fmt.Println("\nShutting down tunnel...")
+		_ = c.Close()
 	}()
+}
+
+func terminalRestoration() func() {
+	oldState, err := term.GetState(int(os.Stdin.Fd()))
+	if err == nil {
+		return func() {
+			term.Restore(int(os.Stdin.Fd()), oldState)
+		}
+	}
+	return func() {}
 }
