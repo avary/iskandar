@@ -20,7 +20,6 @@ import (
 func TestEndToEnd(t *testing.T) {
 	ctx := context.Background()
 
-	// Start docker-compose services (test-app and tunnel-server)
 	composeFilePath := "docker-compose.e2e.yml"
 
 	composeStack, err := compose.NewDockerCompose(composeFilePath)
@@ -40,7 +39,6 @@ func TestEndToEnd(t *testing.T) {
 	t.Logf("Tunnel established with subdomain: %s", subdomain)
 
 	t.Run("POST request proxied through tunnel", func(t *testing.T) {
-		fmt.Println("Sub?", fmt.Sprintf("http://%s/api/data", subdomain))
 		tunnelURL := fmt.Sprintf("http://%s/api/data", subdomain)
 
 		resp, err := http.Post(tunnelURL, "application/json", nil)
@@ -79,7 +77,6 @@ func TestEndToEnd(t *testing.T) {
 		defer resp.Body.Close()
 		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 
-		// Test 500
 		resp, err = http.Get(fmt.Sprintf("http://%s/server-error", subdomain))
 		require.NoError(t, err)
 		defer resp.Body.Close()
@@ -103,10 +100,8 @@ func startCLI(t *testing.T, ctx context.Context) (*exec.Cmd, string) {
 		}
 	}
 
-	// Start CLI and capture combined output
 	cmd := exec.CommandContext(ctx, cliBinary, "tunnel", "localhost:3003", "--server", "http://localhost:8080", "--logging")
 
-	// Capture both stdout and stderr
 	var outputBuf strings.Builder
 	cmd.Stdout = &outputBuf
 	cmd.Stderr = &outputBuf
@@ -114,15 +109,12 @@ func startCLI(t *testing.T, ctx context.Context) (*exec.Cmd, string) {
 	err := cmd.Start()
 	require.NoError(t, err)
 
-	// Give CLI time to connect and log subdomain
 	time.Sleep(3 * time.Second)
 
-	// Get output
 	cliOutput := outputBuf.String()
 
 	t.Logf("CLI output:\n%s", cliOutput)
 
-	// Extract subdomain with regex
 	subdomainRegex := regexp.MustCompile(`http://([a-z0-9]+\.localhost\.direct:8080)`)
 	matches := subdomainRegex.FindStringSubmatch(cliOutput)
 	require.NotEmpty(t, matches, "Failed to extract subdomain from CLI output")
