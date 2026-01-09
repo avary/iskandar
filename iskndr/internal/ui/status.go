@@ -86,10 +86,10 @@ func (m Model) View() string {
 	return s
 }
 
-func InitUi(destinationAddress, serverUrl, subdomain string) *tea.Program {
+func InitUi(destinationAddress, serverUrl, subdomain, version string) *tea.Program {
 	model := NewModel()
 	model.Status = "online"
-	model.Version = "0.1.0"
+	model.Version = version
 	model.LocalDestination = destinationAddress
 	model.PublicURL = subdomain
 	model.ServerURL = serverUrl

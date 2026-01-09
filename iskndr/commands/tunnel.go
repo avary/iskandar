@@ -69,7 +69,7 @@ The destination can be specified as:
 
 			var program *tea.Program
 			if !enableLogging {
-				program = ui.InitUi(destinationAddress, serverUrl, regMsg.Subdomain)
+				program = ui.InitUi(destinationAddress, serverUrl, regMsg.Subdomain, Version)
 			}
 
 			setupShutdownHandler(c, program)

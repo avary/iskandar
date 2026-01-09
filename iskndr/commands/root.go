@@ -12,6 +12,7 @@ func Execute() error {
 	}
 
 	rootCmd.AddCommand(newTunnelCommand())
+	rootCmd.AddCommand(newVersionCommand())
 
 	return rootCmd.Execute()
 }
