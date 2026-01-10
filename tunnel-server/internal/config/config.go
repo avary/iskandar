@@ -3,11 +3,12 @@ package config
 import "github.com/caarlos0/env/v11"
 
 type Config struct {
-	BaseScheme string `env:"ISKNDR_BASE_SCHEME" envDefault:"http"`
-	BaseDomain string `env:"ISKNDR_BASE_DOMAIN" envDefault:"localhost.direct:8080"`
-	Port       int    `env:"ISKNDR_PORT" envDefault:"8080"`
-	Logging    bool   `env:"ISKNDR_LOGGING" envDefault:"true"`
-	MaxTunnels int    `env:"ISKNDR_MAX_TUNNELS" envDefault:"100"`
+	BaseScheme           string `env:"ISKNDR_BASE_SCHEME" envDefault:"http"`
+	BaseDomain           string `env:"ISKNDR_BASE_DOMAIN" envDefault:"localhost.direct:8080"`
+	Port                 int    `env:"ISKNDR_PORT" envDefault:"8080"`
+	Logging              bool   `env:"ISKNDR_LOGGING" envDefault:"true"`
+	MaxTunnels           int    `env:"ISKNDR_MAX_TUNNELS" envDefault:"100"`
+	MaxRequestsPerTunnel int    `env:"ISKNDR_MAX_REQUESTS_PER_TUNNEL" envDefault:"50"`
 }
 
 func LoadConfigFromEnv() (*Config, error) {

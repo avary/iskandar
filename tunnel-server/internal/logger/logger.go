@@ -148,3 +148,17 @@ func MaxTunnelsReached() {
 	log.Error().
 		Msg("Maximum number of tunnels reached")
 }
+
+func MaxRequestsPerTunnelReached(subdomain string) {
+	log.Error().
+		Str("subdomain", subdomain).
+		Msg("Maximum number of concurrent requests per tunnel reached")
+}
+
+func RequestRegistrationFailed(requestId, subdomain string, err error) {
+	log.Error().
+		Str("request_id", requestId).
+		Str("subdomain", subdomain).
+		Err(err).
+		Msg("Failed to register request")
+}

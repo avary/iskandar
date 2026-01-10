@@ -25,7 +25,7 @@ func main() {
 		log.Fatalf("Failed to parse public URL base: %v", err)
 	}
 	connectionStore := NewInMemoryConnectionStore(cfg.MaxTunnels)
-	requestManager := NewInMemoryRequestManager()
+	requestManager := NewInMemoryRequestManager(cfg.MaxRequestsPerTunnel)
 
 	server := NewIskndrServer(publicURLBase, connectionStore, requestManager)
 

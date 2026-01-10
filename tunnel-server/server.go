@@ -135,8 +135,18 @@ func (i *IskndrServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 
 	logger.RequestForwarded(requestId, subdomain)
 
-	ch := i.requestManager.RegisterRequest(requestId)
-	defer i.requestManager.RemoveRequest(requestId)
+	ch, err := i.requestManager.RegisterRequest(requestId, subdomain)
+	if err != nil {
+		if errors.Is(err, ErrMaxRequestsPerTunnel) {
+			logger.MaxRequestsPerTunnelReached(subdomain)
+			http.Error(w, "Tunnel request capacity reached", http.StatusServiceUnavailable)
+			return
+		}
+		logger.RequestRegistrationFailed(requestId, subdomain, err)
+		http.Error(w, "Failed to register request", http.StatusInternalServerError)
+		return
+	}
+	defer i.requestManager.RemoveRequest(requestId, subdomain)
 
 	select {
 	case response, ok := <-ch:

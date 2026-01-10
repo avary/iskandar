@@ -40,13 +40,13 @@ func (m *MockRequestManager) GetRequestChannel(requestId string) (MessageChannel
 	return args.Get(0).(MessageChannel), args.Bool(1)
 }
 
-func (m *MockRequestManager) RegisterRequest(requestId string) MessageChannel {
-	args := m.Called(requestId)
-	return args.Get(0).(MessageChannel)
+func (m *MockRequestManager) RegisterRequest(requestId string, subdomain string) (MessageChannel, error) {
+	args := m.Called(requestId, subdomain)
+	return args.Get(0).(MessageChannel), args.Error(1)
 }
 
-func (m *MockRequestManager) RemoveRequest(requestId string) {
-	m.Called(requestId)
+func (m *MockRequestManager) RemoveRequest(requestId string, subdomain string) {
+	m.Called(requestId, subdomain)
 }
 
 func TestServer(t *testing.T) {
