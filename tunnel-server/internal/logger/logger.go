@@ -5,51 +5,78 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 )
 
-func Initialize(dev bool) {
-	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
-
-	if dev {
-		log.Logger = log.Output(zerolog.ConsoleWriter{
-			Out:        os.Stderr,
-			TimeFormat: time.RFC3339,
-		})
-		zerolog.SetGlobalLevel(zerolog.DebugLevel)
-	} else {
-		zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	}
+type Logger interface {
+	ServerStarted(port int)
+	TunnelConnected(subdomain, remoteAddr string)
+	TunnelDisconnected(subdomain string, err error)
+	TunnelRegistrationFailed(err error)
+	HTTPRequestReceived(subdomain, method, path, remoteAddr string)
+	TunnelNotFound(subdomain, host string)
+	RequestForwarded(requestID, subdomain string)
+	RequestForwardFailed(requestID, subdomain string, err error)
+	HTTPResponse(subdomain, method, path string, status int, duration time.Duration, requestID string)
+	StreamingStarted(requestID string, status int, bodySize int)
+	StreamingChunk(requestID string, chunkSize int, totalDuration time.Duration)
+	StreamingCompleted(requestID string, totalDuration time.Duration)
+	ChannelClosed(requestID string, duration time.Duration)
+	RequestTimeout(requestID, subdomain, path string)
+	ResponseWriteFailed(requestID string, bytesExpected, bytesWritten int, err error)
+	WebSocketCloseFailed(subdomain string, err error)
+	MaxTunnelsReached()
+	MaxRequestsPerTunnelReached(subdomain string)
+	RequestRegistrationFailed(requestId, subdomain string, err error)
 }
 
-func ServerStarted(port int) {
-	log.Info().
+type ZerologLogger struct {
+	log zerolog.Logger
+}
+
+func NewLogger(enabled bool) Logger {
+	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+
+	var logger zerolog.Logger
+	if enabled {
+		logger = zerolog.New(zerolog.ConsoleWriter{
+			Out:        os.Stderr,
+			TimeFormat: time.RFC3339,
+		}).With().Timestamp().Logger().Level(zerolog.InfoLevel)
+	} else {
+		logger = zerolog.New(os.Stderr).Level(zerolog.Disabled)
+	}
+
+	return &ZerologLogger{log: logger}
+}
+
+func (l *ZerologLogger) ServerStarted(port int) {
+	l.log.Info().
 		Int("port", port).
 		Msg("Tunnel server started")
 }
 
-func TunnelConnected(subdomain, remoteAddr string) {
-	log.Info().
+func (l *ZerologLogger) TunnelConnected(subdomain, remoteAddr string) {
+	l.log.Info().
 		Str("subdomain", subdomain).
 		Str("remote_addr", remoteAddr).
 		Msg("Tunnel connected")
 }
 
-func TunnelDisconnected(subdomain string, err error) {
-	log.Info().
+func (l *ZerologLogger) TunnelDisconnected(subdomain string, err error) {
+	l.log.Info().
 		Str("subdomain", subdomain).
 		Err(err).
 		Msg("Tunnel disconnected")
 }
 
-func TunnelRegistrationFailed(err error) {
-	log.Error().
+func (l *ZerologLogger) TunnelRegistrationFailed(err error) {
+	l.log.Error().
 		Err(err).
 		Msg("Failed to register tunnel connection")
 }
 
-func HTTPRequestReceived(subdomain, method, path, remoteAddr string) {
-	log.Debug().
+func (l *ZerologLogger) HTTPRequestReceived(subdomain, method, path, remoteAddr string) {
+	l.log.Info().
 		Str("subdomain", subdomain).
 		Str("method", method).
 		Str("path", path).
@@ -57,30 +84,30 @@ func HTTPRequestReceived(subdomain, method, path, remoteAddr string) {
 		Msg("HTTP request received")
 }
 
-func TunnelNotFound(subdomain, host string) {
-	log.Warn().
+func (l *ZerologLogger) TunnelNotFound(subdomain, host string) {
+	l.log.Warn().
 		Str("subdomain", subdomain).
 		Str("host", host).
 		Msg("Tunnel not found")
 }
 
-func RequestForwarded(requestID, subdomain string) {
-	log.Debug().
+func (l *ZerologLogger) RequestForwarded(requestID, subdomain string) {
+	l.log.Info().
 		Str("request_id", requestID).
 		Str("subdomain", subdomain).
 		Msg("Request forwarded to tunnel")
 }
 
-func RequestForwardFailed(requestID, subdomain string, err error) {
-	log.Error().
+func (l *ZerologLogger) RequestForwardFailed(requestID, subdomain string, err error) {
+	l.log.Error().
 		Err(err).
 		Str("request_id", requestID).
 		Str("subdomain", subdomain).
 		Msg("Failed to forward request to tunnel")
 }
 
-func HTTPResponse(subdomain, method, path string, status int, duration time.Duration, requestID string) {
-	log.Info().
+func (l *ZerologLogger) HTTPResponse(subdomain, method, path string, status int, duration time.Duration, requestID string) {
+	l.log.Info().
 		Str("subdomain", subdomain).
 		Str("method", method).
 		Str("path", path).
@@ -90,46 +117,46 @@ func HTTPResponse(subdomain, method, path string, status int, duration time.Dura
 		Msg("HTTP response")
 }
 
-func StreamingStarted(requestID string, status int, bodySize int) {
-	log.Debug().
+func (l *ZerologLogger) StreamingStarted(requestID string, status int, bodySize int) {
+	l.log.Info().
 		Str("request_id", requestID).
 		Int("status", status).
 		Int("initial_bytes", bodySize).
 		Msg("Streaming response started")
 }
 
-func StreamingChunk(requestID string, chunkSize int, totalDuration time.Duration) {
-	log.Debug().
+func (l *ZerologLogger) StreamingChunk(requestID string, chunkSize int, totalDuration time.Duration) {
+	l.log.Info().
 		Str("request_id", requestID).
 		Int("chunk_bytes", chunkSize).
 		Dur("elapsed_ms", totalDuration).
 		Msg("Streaming chunk sent")
 }
 
-func StreamingCompleted(requestID string, totalDuration time.Duration) {
-	log.Info().
+func (l *ZerologLogger) StreamingCompleted(requestID string, totalDuration time.Duration) {
+	l.log.Info().
 		Str("request_id", requestID).
 		Dur("total_duration_ms", totalDuration).
 		Msg("Streaming response completed")
 }
 
-func ChannelClosed(requestID string, duration time.Duration) {
-	log.Warn().
+func (l *ZerologLogger) ChannelClosed(requestID string, duration time.Duration) {
+	l.log.Warn().
 		Str("request_id", requestID).
 		Dur("duration", duration).
 		Msg("Response channel closed")
 }
 
-func RequestTimeout(requestID, subdomain, path string) {
-	log.Warn().
+func (l *ZerologLogger) RequestTimeout(requestID, subdomain, path string) {
+	l.log.Warn().
 		Str("request_id", requestID).
 		Str("subdomain", subdomain).
 		Str("path", path).
 		Msg("Request timeout")
 }
 
-func ResponseWriteFailed(requestID string, bytesExpected, bytesWritten int, err error) {
-	log.Debug().
+func (l *ZerologLogger) ResponseWriteFailed(requestID string, bytesExpected, bytesWritten int, err error) {
+	l.log.Info().
 		Str("request_id", requestID).
 		Int("bytes_expected", bytesExpected).
 		Int("bytes_written", bytesWritten).
@@ -137,26 +164,26 @@ func ResponseWriteFailed(requestID string, bytesExpected, bytesWritten int, err 
 		Msg("Failed to write response to client")
 }
 
-func WebSocketCloseFailed(subdomain string, err error) {
-	log.Debug().
+func (l *ZerologLogger) WebSocketCloseFailed(subdomain string, err error) {
+	l.log.Info().
 		Str("subdomain", subdomain).
 		Err(err).
 		Msg("Failed to close WebSocket connection")
 }
 
-func MaxTunnelsReached() {
-	log.Error().
+func (l *ZerologLogger) MaxTunnelsReached() {
+	l.log.Error().
 		Msg("Maximum number of tunnels reached")
 }
 
-func MaxRequestsPerTunnelReached(subdomain string) {
-	log.Error().
+func (l *ZerologLogger) MaxRequestsPerTunnelReached(subdomain string) {
+	l.log.Error().
 		Str("subdomain", subdomain).
 		Msg("Maximum number of concurrent requests per tunnel reached")
 }
 
-func RequestRegistrationFailed(requestId, subdomain string, err error) {
-	log.Error().
+func (l *ZerologLogger) RequestRegistrationFailed(requestId, subdomain string, err error) {
+	l.log.Error().
 		Str("request_id", requestId).
 		Str("subdomain", subdomain).
 		Err(err).

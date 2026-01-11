@@ -9,6 +9,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	cerrors "github.com/igneel64/iskandar/server/internal/errors"
+	"github.com/igneel64/iskandar/server/internal/logger"
 	"github.com/igneel64/iskandar/shared"
 	"github.com/igneel64/iskandar/shared/protocol"
 	"github.com/stretchr/testify/assert"
@@ -59,7 +60,8 @@ func TestServer(t *testing.T) {
 	t.Run("accepts websocket connection at /tunnel/connect", func(t *testing.T) {
 		connectionStore := NewInMemoryConnectionStore(10)
 		requestManager := NewInMemoryRequestManager(10)
-		server := NewIskndrServer(publicURLBase, connectionStore, requestManager)
+		appLogger := logger.NewLogger(false)
+		server := NewIskndrServer(publicURLBase, connectionStore, requestManager, appLogger)
 
 		ts := httptest.NewServer(server)
 		defer ts.Close()
@@ -108,7 +110,8 @@ func TestWriteProxiedResponse(t *testing.T) {
 	publicURLBase, err := url.Parse("http://localhost.direct:8080")
 	require.NoError(t, err)
 
-	server := NewIskndrServer(publicURLBase, new(MockConnectionStore), new(MockRequestManager))
+	appLogger := logger.NewLogger(false)
+	server := NewIskndrServer(publicURLBase, new(MockConnectionStore), new(MockRequestManager), appLogger)
 
 	t.Run("send back response from channel", func(t *testing.T) {
 		ch := make(chan protocol.Message, 1)

@@ -21,13 +21,15 @@ type IskndrServer struct {
 	publicURLBase  *url.URL
 	connStore      ConnectionStore
 	requestManager RequestManager
+	logger         logger.Logger
 }
 
-func NewIskndrServer(publicURLBase *url.URL, connectionStore ConnectionStore, requestManager RequestManager) *IskndrServer {
+func NewIskndrServer(publicURLBase *url.URL, connectionStore ConnectionStore, requestManager RequestManager, logger logger.Logger) *IskndrServer {
 	i := &IskndrServer{
 		publicURLBase:  publicURLBase,
 		connStore:      connectionStore,
 		requestManager: requestManager,
+		logger:         logger,
 	}
 
 	router := http.NewServeMux()
@@ -55,23 +57,23 @@ func (i *IskndrServer) handleTunnelConnect(w http.ResponseWriter, r *http.Reques
 
 	defer func() {
 		if err := con.Close(); err != nil {
-			logger.WebSocketCloseFailed(subdomainKey, err)
+			i.logger.WebSocketCloseFailed(subdomainKey, err)
 		}
 	}()
 
 	subdomainKey, err = i.connStore.RegisterConnection(con)
 	if err != nil {
 		if errors.Is(err, ErrMaxTunnelsReached) {
-			logger.MaxTunnelsReached()
+			i.logger.MaxTunnelsReached()
 			http.Error(w, "Server tunnel capacity reached", http.StatusServiceUnavailable)
 			return
 		}
-		logger.TunnelRegistrationFailed(err)
+		i.logger.TunnelRegistrationFailed(err)
 		http.Error(w, "Failed to register connection", http.StatusInternalServerError)
 		return
 	}
 
-	logger.TunnelConnected(subdomainKey, r.RemoteAddr)
+	i.logger.TunnelConnected(subdomainKey, r.RemoteAddr)
 
 	subdomainURL := config.ExtractSubdomainURL(i.publicURLBase, subdomainKey)
 
@@ -84,7 +86,7 @@ func (i *IskndrServer) handleTunnelConnect(w http.ResponseWriter, r *http.Reques
 	for {
 		var msg protocol.Message
 		if err = con.ReadJSON(&msg); err != nil {
-			logger.TunnelDisconnected(subdomainKey, err)
+			i.logger.TunnelDisconnected(subdomainKey, err)
 			i.connStore.RemoveConnection(subdomainKey)
 			return
 		}
@@ -99,11 +101,11 @@ func (i *IskndrServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	subdomain := config.ExtractAssignedSubdomain(r.Host)
 
-	logger.HTTPRequestReceived(subdomain, r.Method, r.RequestURI, r.RemoteAddr)
+	i.logger.HTTPRequestReceived(subdomain, r.Method, r.RequestURI, r.RemoteAddr)
 
 	conn, err := i.connStore.GetConnection(subdomain)
 	if err != nil {
-		logger.TunnelNotFound(subdomain, r.Host)
+		i.logger.TunnelNotFound(subdomain, r.Host)
 		http.Error(w, "No tunnel found for subdomain", http.StatusNotFound)
 		return
 	}
@@ -129,21 +131,21 @@ func (i *IskndrServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err = conn.WriteJSON(message); err != nil {
-		logger.RequestForwardFailed(requestId, subdomain, err)
+		i.logger.RequestForwardFailed(requestId, subdomain, err)
 		http.Error(w, "Failed to forward request to tunnel", http.StatusInternalServerError)
 		return
 	}
 
-	logger.RequestForwarded(requestId, subdomain)
+	i.logger.RequestForwarded(requestId, subdomain)
 
 	ch, err := i.requestManager.RegisterRequest(requestId, subdomain)
 	if err != nil {
 		if errors.Is(err, ErrMaxRequestsPerTunnel) {
-			logger.MaxRequestsPerTunnelReached(subdomain)
+			i.logger.MaxRequestsPerTunnelReached(subdomain)
 			http.Error(w, "Tunnel request capacity reached", http.StatusServiceUnavailable)
 			return
 		}
-		logger.RequestRegistrationFailed(requestId, subdomain, err)
+		i.logger.RequestRegistrationFailed(requestId, subdomain, err)
 		http.Error(w, "Failed to register request", http.StatusInternalServerError)
 		return
 	}
@@ -163,11 +165,11 @@ func (i *IskndrServer) writeProxiedResponse(w http.ResponseWriter, ch MessageCha
 		duration := time.Since(startTime)
 
 		if !ok {
-			logger.ChannelClosed(requestId, duration)
+			i.logger.ChannelClosed(requestId, duration)
 			return &cerrors.TunnelNotRespondingError{}
 		}
 
-		logger.HTTPResponse(subdomain, requestMethod, requestURI, response.Status, duration, requestId)
+		i.logger.HTTPResponse(subdomain, requestMethod, requestURI, response.Status, duration, requestId)
 
 		for k, v := range response.Headers {
 			w.Header().Set(k, v)
@@ -175,7 +177,7 @@ func (i *IskndrServer) writeProxiedResponse(w http.ResponseWriter, ch MessageCha
 		w.WriteHeader(response.Status)
 		n, err := w.Write(response.Body)
 		if err != nil {
-			logger.ResponseWriteFailed(requestId, len(response.Body), n, err)
+			i.logger.ResponseWriteFailed(requestId, len(response.Body), n, err)
 			return nil
 		}
 		if flusher, ok := w.(http.Flusher); ok {
@@ -183,20 +185,20 @@ func (i *IskndrServer) writeProxiedResponse(w http.ResponseWriter, ch MessageCha
 		}
 
 		if !response.Done {
-			logger.StreamingStarted(requestId, response.Status, len(response.Body))
+			i.logger.StreamingStarted(requestId, response.Status, len(response.Body))
 		}
 
 		for !response.Done {
 			select {
 			case response, ok = <-ch:
 				if !ok {
-					logger.ChannelClosed(requestId, time.Since(startTime))
+					i.logger.ChannelClosed(requestId, time.Since(startTime))
 					return nil
 				}
 
 				n, err := w.Write(response.Body)
 				if err != nil {
-					logger.ResponseWriteFailed(requestId, len(response.Body), n, err)
+					i.logger.ResponseWriteFailed(requestId, len(response.Body), n, err)
 					return nil
 				}
 				if flusher, ok := w.(http.Flusher); ok {
@@ -204,19 +206,19 @@ func (i *IskndrServer) writeProxiedResponse(w http.ResponseWriter, ch MessageCha
 				}
 
 				if response.Done {
-					logger.StreamingCompleted(requestId, time.Since(startTime))
+					i.logger.StreamingCompleted(requestId, time.Since(startTime))
 				} else {
-					logger.StreamingChunk(requestId, len(response.Body), time.Since(startTime))
+					i.logger.StreamingChunk(requestId, len(response.Body), time.Since(startTime))
 				}
 
 			case <-time.After(30 * time.Second):
-				logger.RequestTimeout(requestId, subdomain, requestURI)
+				i.logger.RequestTimeout(requestId, subdomain, requestURI)
 				return nil
 			}
 		}
 
 	case <-time.After(30 * time.Second):
-		logger.RequestTimeout(requestId, subdomain, requestURI)
+		i.logger.RequestTimeout(requestId, subdomain, requestURI)
 		return &cerrors.TimeoutError{Message: "timeout waiting for tunnel response"}
 	}
 

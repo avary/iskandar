@@ -18,7 +18,7 @@ func main() {
 		log.Fatalf("Failed to load environment config: %v", err)
 	}
 
-	logger.Initialize(cfg.Logging)
+	appLogger := logger.NewLogger(cfg.Logging)
 
 	publicURLBase, err := url.Parse(cfg.BaseScheme + "://" + cfg.BaseDomain)
 	if err != nil {
@@ -27,8 +27,8 @@ func main() {
 	connectionStore := NewInMemoryConnectionStore(cfg.MaxTunnels)
 	requestManager := NewInMemoryRequestManager(cfg.MaxRequestsPerTunnel)
 
-	server := NewIskndrServer(publicURLBase, connectionStore, requestManager)
+	server := NewIskndrServer(publicURLBase, connectionStore, requestManager, appLogger)
 
-	logger.ServerStarted(cfg.Port)
+	appLogger.ServerStarted(cfg.Port)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", cfg.Port), server))
 }
