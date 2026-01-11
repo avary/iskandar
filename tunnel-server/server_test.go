@@ -56,25 +56,27 @@ func TestServer(t *testing.T) {
 	publicURLBase, err := url.Parse("http://localhost.direct:8080")
 	require.NoError(t, err)
 
-	server := NewIskndrServer(publicURLBase, new(MockConnectionStore), new(MockRequestManager))
-
 	t.Run("accepts websocket connection at /tunnel/connect", func(t *testing.T) {
-		// Create test server
+		connectionStore := NewInMemoryConnectionStore(10)
+		requestManager := NewInMemoryRequestManager(10)
+		server := NewIskndrServer(publicURLBase, connectionStore, requestManager)
+
 		ts := httptest.NewServer(server)
 		defer ts.Close()
 
-		// Convert http:// to ws://
 		wsURL := "ws" + strings.TrimPrefix(ts.URL, "http") + "/tunnel/connect"
 
-		// Connect via WebSocket
 		conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 		require.NoError(t, err, "should connect to websocket")
-
-		//nolint:errcheck
 		defer conn.Close()
 
-		// Verify connection is established
-		assert.NotNil(t, conn)
+		// Read the registration message (proves connection is fully set up)
+		var regMsg protocol.RegisterTunnelMessage
+		err = conn.ReadJSON(&regMsg)
+		require.NoError(t, err)
+
+		assert.NotEmpty(t, regMsg.Subdomain)
+		assert.Contains(t, regMsg.Subdomain, "http://")
 	})
 }
 
