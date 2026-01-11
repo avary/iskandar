@@ -5,9 +5,12 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gorilla/websocket"
+	cerrors "github.com/igneel64/iskandar/server/internal/errors"
 	"github.com/igneel64/iskandar/shared"
+	"github.com/igneel64/iskandar/shared/protocol"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -72,5 +75,163 @@ func TestServer(t *testing.T) {
 
 		// Verify connection is established
 		assert.NotNil(t, conn)
+	})
+}
+
+type trackingResponseWriter struct {
+	*httptest.ResponseRecorder
+	writeTimestamps []time.Time
+	flushCount      int
+}
+
+func newTrackingResponseWriter() *trackingResponseWriter {
+	return &trackingResponseWriter{
+		ResponseRecorder: httptest.NewRecorder(),
+		writeTimestamps:  []time.Time{},
+		flushCount:       0,
+	}
+}
+
+func (trw *trackingResponseWriter) Write(b []byte) (int, error) {
+	trw.writeTimestamps = append(trw.writeTimestamps, time.Now())
+	return trw.ResponseRecorder.Write(b)
+}
+
+func (trw *trackingResponseWriter) Flush() {
+	trw.flushCount++
+	trw.ResponseRecorder.Flush()
+}
+
+func TestWriteProxiedResponse(t *testing.T) {
+	publicURLBase, err := url.Parse("http://localhost.direct:8080")
+	require.NoError(t, err)
+
+	server := NewIskndrServer(publicURLBase, new(MockConnectionStore), new(MockRequestManager))
+
+	t.Run("send back response from channel", func(t *testing.T) {
+		ch := make(chan protocol.Message, 1)
+		defer close(ch)
+
+		responseMessage := protocol.Message{
+			Type:   "response",
+			Id:     "req-123",
+			Status: 200,
+			Body:   []byte("Hello, World!"),
+			Headers: map[string]string{
+				"Content-Type": "text/plain",
+			},
+			Done: true,
+		}
+		ch <- responseMessage
+
+		response := httptest.NewRecorder()
+
+		err := server.writeProxiedResponse(response, ch, "req-123", "subdomain", "/test", "GET", time.Now())
+		require.NoError(t, err)
+
+		result := response.Result()
+		defer result.Body.Close()
+
+		assert.Equal(t, 200, result.StatusCode)
+		assert.Equal(t, "text/plain", result.Header.Get("Content-Type"))
+		assert.Equal(t, "Hello, World!", response.Body.String())
+	})
+
+	t.Run("send back stream response from channel", func(t *testing.T) {
+		ch := make(chan protocol.Message)
+		defer close(ch)
+
+		responseFirstMessage := protocol.Message{
+			Type:   "response",
+			Id:     "req-123",
+			Status: 200,
+			Body:   []byte("Hello"),
+			Headers: map[string]string{
+				"Content-Type": "text/plain",
+			},
+			Done: false,
+		}
+
+		responseFinalMessage := protocol.Message{
+			Type: "response",
+			Id:   "req-123",
+			Body: []byte(", World!"),
+			Done: true,
+		}
+
+		go func() {
+			ch <- responseFirstMessage
+			time.Sleep(10 * time.Millisecond)
+			ch <- responseFinalMessage
+		}()
+
+		response := httptest.NewRecorder()
+
+		err := server.writeProxiedResponse(response, ch, "req-123", "subdomain", "/test", "GET", time.Now())
+		require.NoError(t, err)
+
+		result := response.Result()
+		defer result.Body.Close()
+
+		assert.Equal(t, 200, result.StatusCode)
+		assert.Equal(t, "text/plain", result.Header.Get("Content-Type"))
+		assert.Equal(t, "Hello, World!", response.Body.String())
+	})
+
+	t.Run("sends channel not responding error", func(t *testing.T) {
+		ch := make(chan protocol.Message)
+		close(ch)
+		response := httptest.NewRecorder()
+
+		err := server.writeProxiedResponse(response, ch, "req-123", "subdomain", "/test", "GET", time.Now())
+		require.Error(t, err)
+		assert.IsType(t, &cerrors.TunnelNotRespondingError{}, err)
+	})
+
+	t.Run("streams chunks immediately before completion", func(t *testing.T) {
+		ch := make(chan protocol.Message)
+		defer close(ch)
+
+		responseFirstMessage := protocol.Message{
+			Type:   "response",
+			Id:     "req-123",
+			Status: 200,
+			Body:   []byte("Hello"),
+			Headers: map[string]string{
+				"Content-Type": "text/plain",
+			},
+			Done: false,
+		}
+
+		responseFinalMessage := protocol.Message{
+			Type: "response",
+			Id:   "req-123",
+			Body: []byte(", World!"),
+			Done: true,
+		}
+
+		response := newTrackingResponseWriter()
+		delay := 50 * time.Millisecond
+		go func() {
+			ch <- responseFirstMessage
+			time.Sleep(delay)
+			ch <- responseFinalMessage
+		}()
+
+		err := server.writeProxiedResponse(response, ch, "req-123", "subdomain", "/test", "GET", time.Now())
+		require.NoError(t, err)
+
+		result := response.Result()
+		defer result.Body.Close()
+
+		assert.Equal(t, 200, result.StatusCode)
+		assert.Equal(t, "text/plain", result.Header.Get("Content-Type"))
+		assert.Equal(t, "Hello, World!", response.Body.String())
+		assert.Equal(t, response.flushCount, 2, "should have flushed at least twice")
+
+		assert.Len(t, response.writeTimestamps, 2)
+		timeBetweenWrites := response.writeTimestamps[1].Sub(response.writeTimestamps[0])
+		assert.GreaterOrEqual(t, timeBetweenWrites, delay,
+			"second write should be delayed (proves first write happened immediately)")
 	})
 }

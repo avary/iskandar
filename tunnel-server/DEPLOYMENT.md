@@ -2,14 +2,14 @@
 
 ## Self-Hosting with Docker and Nginx
 
-This guide explains how to deploy the iskandar tunnel server with nginx as a reverse proxy.
+This guide is an example on how to deploy the iskandar tunnel server with nginx as a reverse proxy.
 
 ### Prerequisites
 
-- Docker and Docker Compose installed
+- Docker
 - A domain name (e.g., `tunnel.example.com`)
 - DNS configured with wildcard A record: `*.tunnel.example.com` pointing to your server
-- SSL certificates (from Let's Encrypt or your provider)
+- SSL certificates (from Let's Encrypt, self-signed or your provider)
 - Ports 80 and 443 open on your firewall
 
 ### Docker Compose Setup
@@ -53,11 +53,14 @@ networks:
 
 ### Environment Variables
 
-| Variable             | Description                | Default                 |
-| -------------------- | -------------------------- | ----------------------- |
-| `ISKNDR_BASE_SCHEME` | URL scheme for tunnel URLs | `http`                  |
-| `ISKNDR_BASE_DOMAIN` | Base domain for tunnels    | `localhost.direct:8080` |
-| `ISKNDR_PORT`        | Port the server listens on | `8080`                  |
+| Variable                         | Description                                              | Default                 |
+| -------------------------------- | -------------------------------------------------------- | ----------------------- |
+| `ISKNDR_BASE_SCHEME`             | URL scheme for tunnel URLs                               | `http`                  |
+| `ISKNDR_BASE_DOMAIN`             | Base domain for tunnels                                  | `localhost.direct:8080` |
+| `ISKNDR_PORT`                    | Port the server listens on                               | `8080`                  |
+| `ISKNDR_MAX_TUNNELS`             | Max tunnels connections allowed                          | `100`                   |
+| `ISKNDR_MAX_REQUESTS_PER_TUNNEL` | Max requests processed in parallel per tunnel connection | `50`                    |
+| `ISKNDR_LOGGING`                 | Enable logging                                           | `true`                  |
 
 ### Start the Server
 

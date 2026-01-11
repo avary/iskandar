@@ -12,7 +12,6 @@ A lightweight, self-hosted HTTP tunnel service for exposing local applications t
 - 📦 **Self-Hosted** - Full control over your infrastructure
 - 🔒 **HTTPS Support** - Built-in TLS termination with nginx
 - 🌐 **Wildcard Subdomains** - Automatic subdomain allocation for each tunnel
-- 🐳 **Docker Ready** - Easy deployment with Docker Compose
 
 ## Quick Start
 
@@ -36,22 +35,21 @@ Replace `https://myiskandar.server.deployment.com` with your tunnel server URL.
 
 Complete deployment instructions with Docker, nginx, and HTTPS setup are available in [tunnel-server/DEPLOYMENT.md](tunnel-server/DEPLOYMENT.md).
 
-Deployment with Docker Compose:
-
-```bash
-cd tunnel-server
-docker-compose up -d
-```
-
 ## Project Structure
 
 ```
+
 iskandar/
-├── iskndr/          # CLI client
-├── tunnel-server/   # HTTP tunnel server
-└── shared/          # Shared code between client and server
+├── iskndr/ # CLI client
+├── tunnel-server/ # HTTP tunnel server
+└── shared/ # Shared code
+
 ```
 
 ## License
 
 MIT License - see [LICENSE](LICENSE) for details.
+
+```
+
+```

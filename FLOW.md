@@ -2,6 +2,25 @@
 
 A graph that helps understand the flow of requests/routines that are happening in the apps.
 
+In summary, the most basic flow to understand the flow is the following:
+
+**Setup**
+On setting up the tunnel:
+
+1. The CLI starts a WebSocket tunnel connection with the server.
+2. The server creates and assigns a subdomain and sends it back to the client.
+3. The server keeps a single blocking loop reading messages from the WebSocket.
+
+**Request**
+On a request to the tunnel domain:
+
+1. The server catch-all handler sends the request information through the websocket connection to the CLI.
+   On the same step creates a request-specific channel waiting for a response.
+2. The CLI receives from the websocket the message and spawns a goroutine for each request and sends it on the target app.
+3. When a response arrives from the target app to the request specific goroutine, the goroutine writes a message on the server websocket connection.
+4. The blocking Setup.3 loop reads the message and routes the response information to the request specific channel waiting in Request.1 .
+5. On the channel message arriving, the server sends back the appropriate response to the request.
+
 ## Connection Establishment
 
 ```

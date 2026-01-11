@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/igneel64/iskandar/server/internal/config"
+	cerrors "github.com/igneel64/iskandar/server/internal/errors"
 	"github.com/igneel64/iskandar/server/internal/logger"
 	"github.com/igneel64/iskandar/shared"
 	"github.com/igneel64/iskandar/shared/protocol"
@@ -148,17 +149,25 @@ func (i *IskndrServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	defer i.requestManager.RemoveRequest(requestId, subdomain)
 
+	if err := i.writeProxiedResponse(w, ch, requestId, subdomain, r.RequestURI, r.Method, startTime); err != nil {
+		if httpErr, ok := err.(cerrors.SendableHTTPError); ok {
+			http.Error(w, httpErr.Error(), httpErr.StatusCode())
+		}
+		return
+	}
+}
+
+func (i *IskndrServer) writeProxiedResponse(w http.ResponseWriter, ch MessageChannel, requestId, subdomain, requestURI, requestMethod string, startTime time.Time) error {
 	select {
 	case response, ok := <-ch:
 		duration := time.Since(startTime)
 
 		if !ok {
 			logger.ChannelClosed(requestId, duration)
-			http.Error(w, "Failed to get response from tunnel", http.StatusInternalServerError)
-			return
+			return &cerrors.TunnelNotRespondingError{}
 		}
 
-		logger.HTTPResponse(subdomain, r.Method, r.RequestURI, response.Status, duration, requestId)
+		logger.HTTPResponse(subdomain, requestMethod, requestURI, response.Status, duration, requestId)
 
 		for k, v := range response.Headers {
 			w.Header().Set(k, v)
@@ -167,7 +176,7 @@ func (i *IskndrServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 		n, err := w.Write(response.Body)
 		if err != nil {
 			logger.ResponseWriteFailed(requestId, len(response.Body), n, err)
-			return
+			return nil
 		}
 		if flusher, ok := w.(http.Flusher); ok {
 			flusher.Flush()
@@ -182,13 +191,13 @@ func (i *IskndrServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 			case response, ok = <-ch:
 				if !ok {
 					logger.ChannelClosed(requestId, time.Since(startTime))
-					return
+					return nil
 				}
 
 				n, err := w.Write(response.Body)
 				if err != nil {
 					logger.ResponseWriteFailed(requestId, len(response.Body), n, err)
-					return
+					return nil
 				}
 				if flusher, ok := w.(http.Flusher); ok {
 					flusher.Flush()
@@ -201,16 +210,17 @@ func (i *IskndrServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 				}
 
 			case <-time.After(30 * time.Second):
-				logger.RequestTimeout(requestId, subdomain, r.RequestURI)
-				return
+				logger.RequestTimeout(requestId, subdomain, requestURI)
+				return nil
 			}
 		}
 
 	case <-time.After(30 * time.Second):
-		logger.RequestTimeout(requestId, subdomain, r.RequestURI)
-		http.Error(w, "Timeout waiting for response from tunnel", http.StatusGatewayTimeout)
-		return
+		logger.RequestTimeout(requestId, subdomain, requestURI)
+		return &cerrors.TimeoutError{Message: "timeout waiting for tunnel response"}
 	}
+
+	return nil
 }
 
 func (i *IskndrServer) handleHealth(w http.ResponseWriter, r *http.Request) {
