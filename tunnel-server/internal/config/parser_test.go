@@ -27,13 +27,25 @@ func TestExtractSubdomainURL(t *testing.T) {
 }
 
 func TestExtractAssignedSubdomain(t *testing.T) {
-	t.Run("extracts first part of hostname", func(t *testing.T) {
-		result := ExtractAssignedSubdomain("abc123.localhost.direct:8080")
+	t.Run("extracts first part of hostname with port", func(t *testing.T) {
+		result, err := ExtractAssignedSubdomain("abc123.localhost.direct:8080")
+		require.NoError(t, err)
 		assert.Equal(t, "abc123", result)
 	})
 
-	t.Run("single part hostname", func(t *testing.T) {
-		result := ExtractAssignedSubdomain("localhost")
-		assert.Equal(t, "localhost", result)
+	t.Run("extracts first part of hostname without port", func(t *testing.T) {
+		result, err := ExtractAssignedSubdomain("abc123.example.com")
+		require.NoError(t, err)
+		assert.Equal(t, "abc123", result)
+	})
+
+	t.Run("returns error for single part hostname", func(t *testing.T) {
+		_, err := ExtractAssignedSubdomain("localhost")
+		assert.Error(t, err)
+	})
+
+	t.Run("returns error for hostname with port but no subdomain", func(t *testing.T) {
+		_, err := ExtractAssignedSubdomain("localhost:8080")
+		assert.Error(t, err)
 	})
 }

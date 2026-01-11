@@ -11,6 +11,8 @@ import (
 	"github.com/igneel64/iskandar/shared"
 )
 
+const ConReadLimit = 4 * 1024 * 1024 // 4 MB
+
 type ConnectionStore interface {
 	RegisterConnection(conn *websocket.Conn) (string, error)
 	GetConnection(subdomainKey string) (*shared.SafeWebSocketConn, error)
@@ -35,6 +37,7 @@ func NewInMemoryConnectionStore(maxTunnels int) *InMemoryConnectionStore {
 func (i *InMemoryConnectionStore) RegisterConnection(conn *websocket.Conn) (string, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
+	conn.SetReadLimit(ConReadLimit)
 
 	if len(i.connMap) >= i.maxTunnels {
 		return "", ErrMaxTunnelsReached

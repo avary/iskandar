@@ -12,6 +12,7 @@ import (
 	"github.com/igneel64/iskandar/server/internal/config"
 	cerrors "github.com/igneel64/iskandar/server/internal/errors"
 	"github.com/igneel64/iskandar/server/internal/logger"
+	"github.com/igneel64/iskandar/server/internal/middleware"
 	"github.com/igneel64/iskandar/shared"
 	"github.com/igneel64/iskandar/shared/protocol"
 )
@@ -23,6 +24,8 @@ type IskndrServer struct {
 	requestManager RequestManager
 	logger         logger.Logger
 }
+
+const MaxBodySize = 4 * 1024 * 1024 // 4 MB
 
 func NewIskndrServer(publicURLBase *url.URL, connectionStore ConnectionStore, requestManager RequestManager, logger logger.Logger) *IskndrServer {
 	i := &IskndrServer{
@@ -37,13 +40,15 @@ func NewIskndrServer(publicURLBase *url.URL, connectionStore ConnectionStore, re
 	router.HandleFunc("/tunnel/connect", i.handleTunnelConnect)
 	router.HandleFunc("/", i.handleRequest)
 
-	i.Handler = router
+	i.Handler = middleware.PanicRecoveryMiddleware(router, logger)
 
 	return i
 }
 
 var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool { return true },
+	CheckOrigin:     func(r *http.Request) bool { return true },
+	ReadBufferSize:  4096,
+	WriteBufferSize: 4096,
 }
 
 func (i *IskndrServer) handleTunnelConnect(w http.ResponseWriter, r *http.Request) {
@@ -99,7 +104,11 @@ func (i *IskndrServer) handleTunnelConnect(w http.ResponseWriter, r *http.Reques
 
 func (i *IskndrServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
-	subdomain := config.ExtractAssignedSubdomain(r.Host)
+	subdomain, err := config.ExtractAssignedSubdomain(r.Host)
+	if err != nil {
+		http.Error(w, "Invalid subdomain", http.StatusBadRequest)
+		return
+	}
 
 	i.logger.HTTPRequestReceived(subdomain, r.Method, r.RequestURI, r.RemoteAddr)
 
@@ -110,8 +119,14 @@ func (i *IskndrServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, MaxBodySize)
 	bodyBytes, err := io.ReadAll(r.Body)
 	if err != nil {
+		if errors.As(err, new(*http.MaxBytesError)) {
+			i.logger.RequestBodyTooLarge(subdomain, r.RequestURI)
+			http.Error(w, "Request body too large", http.StatusRequestEntityTooLarge)
+			return
+		}
 		http.Error(w, "Failed to read request body", http.StatusInternalServerError)
 		return
 	}

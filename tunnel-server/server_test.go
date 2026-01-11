@@ -1,6 +1,8 @@
 package main
 
 import (
+	"errors"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
@@ -72,13 +74,71 @@ func TestServer(t *testing.T) {
 		require.NoError(t, err, "should connect to websocket")
 		defer conn.Close()
 
-		// Read the registration message (proves connection is fully set up)
 		var regMsg protocol.RegisterTunnelMessage
 		err = conn.ReadJSON(&regMsg)
 		require.NoError(t, err)
 
 		assert.NotEmpty(t, regMsg.Subdomain)
 		assert.Contains(t, regMsg.Subdomain, "http://")
+	})
+}
+
+func TestHandleRequest(t *testing.T) {
+	t.Run("error on request without subdomain", func(t *testing.T) {
+		publicURLBase, err := url.Parse("http://localhost.direct:8080")
+		require.NoError(t, err)
+		appLogger := logger.NewLogger(false)
+
+		mockConnectionStore := new(MockConnectionStore)
+		mockRequestManager := new(MockRequestManager)
+
+		server := NewIskndrServer(publicURLBase, mockConnectionStore, mockRequestManager, appLogger)
+
+		ts := httptest.NewServer(server)
+		defer ts.Close()
+
+		req, err := http.NewRequest("GET", ts.URL+"/test-path", nil)
+		require.NoError(t, err)
+		req.Host = "localhost"
+
+		response := httptest.NewRecorder()
+
+		server.handleRequest(response, req)
+
+		result := response.Result()
+		defer result.Body.Close()
+
+		assert.Equal(t, http.StatusBadRequest, result.StatusCode)
+		assert.Equal(t, "Invalid subdomain\n", response.Body.String())
+	})
+
+	t.Run("error on request to unassigned subdomain", func(t *testing.T) {
+		publicURLBase, err := url.Parse("http://localhost.direct:8080")
+		require.NoError(t, err)
+		appLogger := logger.NewLogger(false)
+
+		mockConnectionStore := new(MockConnectionStore)
+		mockRequestManager := new(MockRequestManager)
+		mockConnectionStore.On("GetConnection", "test").Return((*shared.SafeWebSocketConn)(nil), errors.New("not found"))
+
+		server := NewIskndrServer(publicURLBase, mockConnectionStore, mockRequestManager, appLogger)
+
+		ts := httptest.NewServer(server)
+		defer ts.Close()
+
+		req, err := http.NewRequest("GET", ts.URL+"/test-path", nil)
+		require.NoError(t, err)
+		req.Host = "test.localhost"
+
+		response := httptest.NewRecorder()
+
+		server.handleRequest(response, req)
+
+		result := response.Result()
+		defer result.Body.Close()
+
+		assert.Equal(t, http.StatusNotFound, result.StatusCode)
+		assert.Equal(t, "No tunnel found for subdomain\n", response.Body.String())
 	})
 }
 

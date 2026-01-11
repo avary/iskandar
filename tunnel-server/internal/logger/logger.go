@@ -27,6 +27,8 @@ type Logger interface {
 	MaxTunnelsReached()
 	MaxRequestsPerTunnelReached(subdomain string)
 	RequestRegistrationFailed(requestId, subdomain string, err error)
+	RequestBodyTooLarge(subdomain, path string)
+	PanicRecovered(path string, panicValue interface{})
 }
 
 type ZerologLogger struct {
@@ -188,4 +190,18 @@ func (l *ZerologLogger) RequestRegistrationFailed(requestId, subdomain string, e
 		Str("subdomain", subdomain).
 		Err(err).
 		Msg("Failed to register request")
+}
+
+func (l *ZerologLogger) RequestBodyTooLarge(subdomain, path string) {
+	l.log.Error().
+		Str("subdomain", subdomain).
+		Str("path", path).
+		Msg("Request body too large")
+}
+
+func (l *ZerologLogger) PanicRecovered(path string, panicValue interface{}) {
+	l.log.Error().
+		Str("path", path).
+		Interface("panic_value", panicValue).
+		Msg("Panic recovered in HTTP handler")
 }
